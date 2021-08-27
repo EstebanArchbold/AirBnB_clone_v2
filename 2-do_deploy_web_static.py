@@ -1,57 +1,46 @@
 #!/usr/bin/python3
-"""
-a Fabric script that generates a .tgz archive
-from the contents of the web_static folder of the AirBnB Clone repo
-"""
-from fabric.operations import local, put, run
-from datetime import datetime as d
-from fabric.api import *
+""" Fabric script """
+from fabric.api import env, put, run
+from datetime import datetime
+import os
 
-env.hosts = ['34.74.120.150', '54.173.196.75']
+
+env.hosts = ['35.231.66.1', '54.221.2.88']
 
 
 def do_pack():
-    """ generates a .tgz archive """
-    name = "versions/web_static_" + str(d.now().year)
-    name += str(d.now().month) + str(d.now().day) + str(d.now().hour)
-    name += str(d.now().minute) + str(d.now().second) + ".tgz"
-    result = local("mkdir -p versions; tar -cvzf \"%s\" web_static" % name)
-    if result.failed:
-        return NULL
+    """ Generates a .tgz file from the contents of 'web_static' folder"""
+    now = datetime.now()
+    local('mkdir -p versions')
+    result = local('tar -cvzf versions/web_static_{}.tgz ./web_static/'.format(
+        now.strftime('%Y%m%d%H%M%S')))
+    if result.succeeded:
+        return 'versions/web_static_{}.tgz web_static/'.format(
+            now.strftime('%Y%m%d%H%M%S'))
     else:
-        return name
+        return None
 
 
 def do_deploy(archive_path):
-    """ uploads the archive to servers """
-    destination = "/tmp/" + archive_path.split("/")[-1]
-    result = put(archive_path, "/tmp/")
-    if result.failed:
+    """ distributes an archive to the servers """
+    if not os.path.exists(archive_path):
         return False
-    filename = archive_path.split("/")[-1]
-    f = filename.split(".")[0]
-    directory = "/data/web_static/releases/" + f
-    run_res = run("mkdir -p \"%s\"" % directory)
-    if run_res.failed:
+
+    dest_dir = '/data/web_static/releases/'
+    aux = archive_path.split('/')[1]
+    file_name = aux.split('.')[0]
+    dest_file = dest_dir + file_name
+
+    try:
+        put(archive_path, '/tmp')
+        run('mkdir -p {}'.format(dest_file))
+        run('tar -xzf /tmp/{}.tgz -C {}'.format(file_name, dest_file))
+        run('rm -f /tmp/{}.tgz'.format(file_name))
+        run('mv {}/web_static/* {}/'.format(dest_file, dest_file))
+        run('rm -rf {}/web_static/*'.format(dest_file))
+        run('rm -rf /data/web_static/current')
+        run('ln -s {} /data/web_static/current'.format(dest_file))
+        print("New version deployed!")
+        return True
+    except:
         return False
-    run_res = run("tar -xzf %s -C %s" % (destination, directory))
-    if run_res.failed:
-        return False
-    run_res = run("rm %s" % destination)
-    if run_res:
-        return False
-    web = directory + "/web_static/*"
-    run_res = run("mv %s %s" % (web, directory))
-    if run_res.failed:
-        return False
-    web = web[0:-2]
-    run_res = run("rm -rf %s" % web)
-    if run_res.failed:
-        return False
-    run_res = run("rm -rf /data/web_static/current")
-    if run_res.failed:
-        return False
-    run_res = run("ln -s %s /data/web_static/current" % directory)
-    if run_res.failed:
-        return False
-    return True
